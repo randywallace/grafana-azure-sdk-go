@@ -141,17 +141,30 @@ func (c *managedIdentityTokenRetriever) GetCacheKey() string {
 }
 
 func (c *managedIdentityTokenRetriever) Init() error {
-	options := &azidentity.ManagedIdentityCredentialOptions{}
-	if c.clientId != "" {
-		options.ID = azidentity.ClientID(c.clientId)
-	}
-	credential, err := azidentity.NewManagedIdentityCredential(options)
-	if err != nil {
-		return err
-	} else {
-		c.credential = credential
-		return nil
-	}
+  var credential azcore.TokenCredential
+  var err error
+
+  // In the case of a Configured User Assigned Identity Client ID, bypass Chained Auth Provider
+  if c.clientId != "" {
+    options := &azidentity.ManagedIdentityCredentialOptions{
+      ID: azidentity.ClientID(c.clientId),
+    }
+	  credential, err = azidentity.NewManagedIdentityCredential(options)
+    if err != nil {
+      return err
+    }
+
+  // Otherwise, fallback to DefaultAzureCredential, which chains Environment => MSI => Azure CLI
+  } else {
+    options := &azidentity.DefaultAzureCredentialOptions{}
+  	credential, err = azidentity.NewDefaultAzureCredential(options)
+	  if err != nil {
+		  return err
+    }
+  }
+
+  c.credential = credential
+	return nil
 }
 
 func (c *managedIdentityTokenRetriever) GetAccessToken(ctx context.Context, scopes []string) (*AccessToken, error) {
